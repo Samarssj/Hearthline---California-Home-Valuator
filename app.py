@@ -45,6 +45,8 @@ if "prediction_result" not in st.session_state:
     st.session_state.prediction_result = None
 if "prediction_model_name" not in st.session_state:
     st.session_state.prediction_model_name = None
+if "prediction_comparison" not in st.session_state:
+    st.session_state.prediction_comparison = None
 
 st.markdown('<div class="theme-kicker">Appearance</div>', unsafe_allow_html=True)
 theme_left, theme_right = st.columns(2, gap="small")
@@ -897,6 +899,24 @@ if submitted:
     st.session_state.prediction_result = prediction
     st.session_state.prediction_model_name = bundle.get("model_name", "trained")
 
+    comparison_profiles = {
+        "Your estimate": input_frame.iloc[0].to_dict(),
+        "Affordable Home": PRESETS["Affordable Home"],
+        "Large Family Home": PRESETS["Large Family Home"],
+        "Coastal Property": PRESETS["Coastal Property"],
+    }
+    comparison_frame = pd.DataFrame.from_dict(comparison_profiles, orient="index")
+    comparison_frame = comparison_frame[FEATURE_COLUMNS]
+    comparison_values = model.predict(comparison_frame)
+    st.session_state.prediction_comparison = [
+        {
+            "Profile": profile_name,
+            "Estimated value": float(profile_prediction),
+            "Current": profile_name == "Your estimate",
+        }
+        for profile_name, profile_prediction in zip(comparison_profiles, comparison_values)
+    ]
+
 if st.session_state.prediction_result is not None:
     saved_prediction = float(st.session_state.prediction_result)
     saved_model_name = st.session_state.prediction_model_name or bundle.get("model_name", "trained")
@@ -909,10 +929,56 @@ if st.session_state.prediction_result is not None:
     )
     if best_rmse is not None:
         st.info(
-            f"How to read the chart above: it compares model accuracy, not your property. "
+            f"How to read the model chart above: it compares model accuracy, not your property. "
             f"The gold {saved_model_name} bar is the production model; its typical validation error is about ${best_rmse:,.0f}. "
             "Changing your inputs changes the estimated market value, while the RMSE comparison stays fixed because it describes model performance."
         )
+
+    comparison_data = pd.DataFrame(st.session_state.prediction_comparison or [])
+    if not comparison_data.empty:
+        st.markdown('<div class="section-head comparison-head"><p class="eyebrow">Your estimate in context</p><p class="section-title">See the possibilities side by side</p></div>', unsafe_allow_html=True)
+        st.markdown(
+            '<p class="section-copy">These are four fresh predictions from the same production pipeline. Your submitted property is highlighted in gold; the other bars show how the model responds to different district profiles.</p>',
+            unsafe_allow_html=True,
+        )
+        comparison_max = float(comparison_data["Estimated value"].max()) * 1.2
+        comparison_base = alt.Chart(comparison_data)
+        comparison_bars = comparison_base.mark_bar(size=34, cornerRadiusEnd=6).encode(
+            x=alt.X(
+                "Estimated value:Q",
+                title="Model-predicted value (USD)",
+                axis=alt.Axis(format="$,.0f", titleColor=chart_axis_color, labelColor=chart_axis_color),
+                scale=alt.Scale(domain=[0, comparison_max]),
+            ),
+            y=alt.Y("Profile:N", title=None, sort="-x", axis=alt.Axis(labelColor=chart_axis_color)),
+            color=alt.Color(
+                "Current:N",
+                scale=alt.Scale(domain=[True, False], range=["#c9974e", chart_other_bar]),
+                legend=None,
+            ),
+            tooltip=[
+                alt.Tooltip("Profile:N", title="Profile"),
+                alt.Tooltip("Estimated value:Q", title="Predicted value", format="$,.0f"),
+                alt.Tooltip("Current:N", title="Your submitted property"),
+            ],
+        )
+        comparison_labels = comparison_base.mark_text(
+            align="left", baseline="middle", dx=7, color=chart_axis_color, fontSize=12
+        ).encode(
+            x=alt.X("Estimated value:Q", scale=alt.Scale(domain=[0, comparison_max])),
+            y=alt.Y("Profile:N", sort="-x"),
+            text=alt.Text("Estimated value:Q", format="$,.0f"),
+        )
+        comparison_chart = (
+            (comparison_bars + comparison_labels)
+            .properties(height=245, background=chart_background)
+            .configure_view(strokeOpacity=0)
+            .configure_axis(gridColor=chart_grid, domain=False, tickColor=chart_grid)
+        )
+        st.markdown('<div class="chart-card">', unsafe_allow_html=True)
+        st.markdown('<p class="chart-note">Gold = your submitted property · Gray = alternative profiles</p>', unsafe_allow_html=True)
+        st.altair_chart(comparison_chart, use_container_width=True)
+        st.markdown('</div>', unsafe_allow_html=True)
 
 # -------------------- INPUT GLOSSARY --------------------
 st.markdown('<div class="section-head"><p class="eyebrow">A closer look</p><p class="section-title">What each input means</p></div>', unsafe_allow_html=True)

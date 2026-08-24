@@ -16,6 +16,8 @@ app.button[button_labels.index("Estimate home value  →")].click().run()
 assert not app.exception, app.exception
 assert len(app.markdown) > 0
 assert app.session_state["prediction_result"] is not None
+assert len(app.get("vega_lite_chart")) >= 2
+assert len(app.session_state["prediction_comparison"]) == 4
 prediction_before_theme_switch = app.session_state["prediction_result"]
 
 # Click Dark mode and confirm the same result survives the Streamlit rerun.
