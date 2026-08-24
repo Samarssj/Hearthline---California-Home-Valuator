@@ -10,7 +10,7 @@
 </p>
 
 <p>
-  <a href="https://house-price-predictor-pied.vercel.app"><strong>Live project link</strong></a>
+  <a href="https://housing-price-predictor-yi6f7mb55w7qpvtie8guac.streamlit.app"><strong>Live project link</strong></a>
   ·
   <a href="https://github.com/Samarssj/Housing-price-predictor/issues">Report an issue</a>
 </p>
