@@ -41,14 +41,21 @@ background_rule = (
 # -------------------- THEME CONTROL --------------------
 if "theme_mode" not in st.session_state:
     st.session_state.theme_mode = "Light"
+if "prediction_result" not in st.session_state:
+    st.session_state.prediction_result = None
+if "prediction_model_name" not in st.session_state:
+    st.session_state.prediction_model_name = None
 
-theme_mode = st.radio(
-    "Appearance",
-    ("Light", "Dark"),
-    horizontal=True,
-    key="theme_mode",
-    help="Switch between light and dark appearance.",
-)
+st.markdown('<div class="theme-kicker">Appearance</div>', unsafe_allow_html=True)
+theme_left, theme_right = st.columns(2, gap="small")
+with theme_left:
+    if st.button("☀  Light mode", key="light_mode_button", use_container_width=True):
+        st.session_state.theme_mode = "Light"
+with theme_right:
+    if st.button("◐  Dark mode", key="dark_mode_button", use_container_width=True):
+        st.session_state.theme_mode = "Dark"
+
+theme_mode = st.session_state.theme_mode
 dark_mode = theme_mode == "Dark"
 st.markdown(
     '<span class="dark-mode-marker"></span>' if dark_mode else '<span class="light-mode-marker"></span>',
@@ -121,6 +128,67 @@ st.markdown(
             font-size: 0.78rem;
             letter-spacing: 0.08em;
             text-transform: uppercase;
+        }}
+
+        .theme-kicker {{
+            color: var(--muted);
+            font-size: 0.68rem;
+            font-weight: 700;
+            letter-spacing: 0.14em;
+            margin: 0 0 0.34rem;
+            text-transform: uppercase;
+        }}
+
+        [data-testid="stRadio"] {{
+            margin: 0 0 0.65rem;
+        }}
+
+        [data-testid="stRadio"] [role="radiogroup"] {{
+            align-items: center;
+            display: flex;
+            gap: 0.45rem;
+        }}
+
+        [data-testid="stRadio"] label {{
+            align-items: center;
+            background: #ffffff;
+            border: 1px solid var(--line);
+            border-radius: 999px;
+            color: var(--ink) !important;
+            cursor: pointer;
+            display: inline-flex;
+            font-size: 0.82rem;
+            font-weight: 700;
+            min-height: 2.25rem;
+            padding: 0.32rem 0.82rem;
+            transition: all 0.2s ease;
+        }}
+
+        [data-testid="stRadio"] label:hover {{
+            border-color: var(--gold);
+            transform: translateY(-1px);
+        }}
+
+        [data-testid="stRadio"] label p,
+        [data-testid="stRadio"] label span {{
+            color: var(--ink) !important;
+            font-size: 0.82rem !important;
+            font-weight: 700 !important;
+        }}
+
+        [data-testid="stRadio"] label:has(input:checked) {{
+            background: var(--navy);
+            border-color: var(--navy);
+            color: #ffffff !important;
+        }}
+
+        [data-testid="stRadio"] label:has(input:checked) p,
+        [data-testid="stRadio"] label:has(input:checked) span {{
+            color: #ffffff !important;
+        }}
+
+        [data-testid="stRadio"] label > div:first-child {{
+            display: none;
         }}
 
         .hero {{
@@ -417,9 +485,53 @@ st.markdown(
             fill: #e3edf2 !important;
         }}
 
+        body:has(.dark-mode-marker) [data-testid="stRadio"] label {{
+            background: #20313f !important;
+            border-color: #4a6070 !important;
+            color: #f4f8fa !important;
+        }}
+
+        body:has(.dark-mode-marker) [data-testid="stRadio"] label p,
+        body:has(.dark-mode-marker) [data-testid="stRadio"] label span {{
+            color: #f4f8fa !important;
+        }}
+
+        body:has(.dark-mode-marker) [data-testid="stRadio"] label:has(input:checked) {{
+            background: #e4b86d !important;
+            border-color: #e4b86d !important;
+            color: #13283d !important;
+        }}
+
+        body:has(.dark-mode-marker) [data-testid="stRadio"] label:has(input:checked) p,
+        body:has(.dark-mode-marker) [data-testid="stRadio"] label:has(input:checked) span {{
+            color: #13283d !important;
+        }}
+
         body:has(.dark-mode-marker) [data-testid="stFormSubmitButton"] button,
         body:has(.dark-mode-marker) .stButton > button {{
-            color: #172433 !important;
+            background: #e4b86d !important;
+            color: #13283d !important;
+            text-shadow: none !important;
+        }}
+
+        body:has(.dark-mode-marker) [data-testid="stFormSubmitButton"] button p,
+        body:has(.dark-mode-marker) [data-testid="stFormSubmitButton"] button span,
+        body:has(.dark-mode-marker) .stButton > button p,
+        body:has(.dark-mode-marker) .stButton > button span {{
+            color: #13283d !important;
+        }}
+
+        body:has(.dark-mode-marker) .prediction-card {{
+            background: linear-gradient(135deg, #4d3a1f, #342b20) !important;
+            border-color: #a87836 !important;
+        }}
+
+        body:has(.dark-mode-marker) .prediction-label {{
+            color: #f3ce8b !important;
+        }}
+
+        body:has(.dark-mode-marker) .prediction-value {{
+            color: #fff4dc !important;
         }}
 
         body:has(.dark-mode-marker) .glossary-item {{
@@ -598,29 +710,43 @@ if not metrics_frame.empty:
     chart_data = metrics_frame[["Model", "rmse", "r2", "Production"]].rename(
         columns={"rmse": "RMSE", "r2": "R²"}
     )
+    chart_data["Series"] = chart_data["Production"].map(
+        {True: "Production model", False: "Comparison model"}
+    )
+    chart_max = float(chart_data["RMSE"].max()) * 1.18
+    chart_base = alt.Chart(chart_data)
+    chart_bars = chart_base.mark_bar(size=34, cornerRadiusEnd=6).encode(
+        x=alt.X(
+            "RMSE:Q",
+            title="Holdout RMSE (USD)",
+            axis=alt.Axis(format="$,.0f", titleColor=chart_axis_color, labelColor=chart_axis_color),
+            scale=alt.Scale(domain=[0, chart_max]),
+        ),
+        y=alt.Y("Model:N", title=None, sort="-x", axis=alt.Axis(labelColor=chart_axis_color)),
+        color=alt.Color(
+            "Series:N",
+            scale=alt.Scale(
+                domain=["Production model", "Comparison model"],
+                range=["#c9974e", chart_other_bar],
+            ),
+            legend=None,
+        ),
+        tooltip=[
+            alt.Tooltip("Model:N", title="Model"),
+            alt.Tooltip("RMSE:Q", title="RMSE", format="$,.0f"),
+            alt.Tooltip("R²:Q", title="R²", format=".3f"),
+            alt.Tooltip("Production:N", title="Used in app"),
+        ],
+    )
+    chart_labels = chart_base.mark_text(
+        align="left", baseline="middle", dx=7, color=chart_axis_color, fontSize=12
+    ).encode(
+        x=alt.X("RMSE:Q", scale=alt.Scale(domain=[0, chart_max])),
+        y=alt.Y("Model:N", sort="-x"),
+        text=alt.Text("RMSE:Q", format="$,.0f"),
+    )
     chart = (
-        alt.Chart(chart_data)
-        .mark_bar(size=34, cornerRadiusEnd=6)
-        .encode(
-            x=alt.X(
-                "RMSE:Q",
-                title="Holdout RMSE (USD)",
-                axis=alt.Axis(format="$,.0f", titleColor=chart_axis_color, labelColor=chart_axis_color),
-                scale=alt.Scale(domain=[0, None]),
-            ),
-            y=alt.Y("Model:N", title=None, sort="-x", axis=alt.Axis(labelColor=chart_axis_color)),
-            color=alt.condition(
-                alt.datum.Production,
-                alt.value("#c9974e"),
-                alt.value(chart_other_bar),
-            ),
-            tooltip=[
-                alt.Tooltip("Model:N", title="Model"),
-                alt.Tooltip("RMSE:Q", title="RMSE", format="$,.0f"),
-                alt.Tooltip("R²:Q", title="R²", format=".3f"),
-                alt.Tooltip("Production:N", title="Used in app"),
-            ],
-        )
+        (chart_bars + chart_labels)
         .properties(height=230, background=chart_background)
         .configure_view(strokeOpacity=0)
         .configure_axis(gridColor=chart_grid, domain=False, tickColor=chart_grid)
@@ -643,9 +769,17 @@ preset_name = st.selectbox(
     "Start from a sample profile",
     list(PRESETS),
     label_visibility="visible",
+    key="preset_name",
     help="Choose a profile to populate the form, or select Custom to enter your own values.",
 )
 defaults = PRESETS[preset_name]
+
+# A theme button causes a Streamlit rerun. Store every input under a stable key
+# so both the form and the last prediction survive that rerun.
+if st.session_state.get("active_preset") != preset_name:
+    for field_name, field_value in defaults.items():
+        st.session_state[f"input_{field_name}"] = field_value
+    st.session_state.active_preset = preset_name
 
 with st.form("prediction_form"):
     col1, col2 = st.columns(2, gap="large")
@@ -656,7 +790,7 @@ with st.form("prediction_form"):
             "Longitude",
             min_value=-180.0,
             max_value=180.0,
-            value=float(defaults["longitude"]),
+            key="input_longitude",
             step=0.01,
             format="%.4f",
             help="East-west location of the district. California values are generally negative.",
@@ -666,7 +800,7 @@ with st.form("prediction_form"):
             "Latitude",
             min_value=-90.0,
             max_value=90.0,
-            value=float(defaults["latitude"]),
+            key="input_latitude",
             step=0.01,
             format="%.4f",
             help="North-south location of the district. Higher values are farther north.",
@@ -676,7 +810,7 @@ with st.form("prediction_form"):
             "Housing median age",
             min_value=0,
             max_value=200,
-            value=int(defaults["housing_median_age"]),
+            key="input_housing_median_age",
             step=1,
             help="The median age of homes in the district, measured in years.",
         )
@@ -684,7 +818,7 @@ with st.form("prediction_form"):
         ocean_proximity = st.selectbox(
             "Ocean proximity",
             OCEAN_PROXIMITIES,
-            index=OCEAN_PROXIMITIES.index(defaults["ocean_proximity"]),
+            key="input_ocean_proximity",
             help="The housing dataset’s geographic proximity category.",
         )
         st.markdown('<p class="input-note">A location signal that captures access to the coast.</p>', unsafe_allow_html=True)
@@ -694,7 +828,7 @@ with st.form("prediction_form"):
         total_rooms = st.number_input(
             "Total rooms",
             min_value=1,
-            value=int(defaults["total_rooms"]),
+            key="input_total_rooms",
             step=1,
             help="Total number of rooms reported across homes in the district.",
         )
@@ -702,7 +836,7 @@ with st.form("prediction_form"):
         total_bedrooms = st.number_input(
             "Total bedrooms",
             min_value=1,
-            value=int(defaults["total_bedrooms"]),
+            key="input_total_bedrooms",
             step=1,
             help="Total bedrooms reported across homes in the district.",
         )
@@ -710,7 +844,7 @@ with st.form("prediction_form"):
         population = st.number_input(
             "Population",
             min_value=1,
-            value=int(defaults["population"]),
+            key="input_population",
             step=1,
             help="Total number of people living in the district.",
         )
@@ -718,7 +852,7 @@ with st.form("prediction_form"):
         households = st.number_input(
             "Households",
             min_value=1,
-            value=int(defaults["households"]),
+            key="input_households",
             step=1,
             help="Total number of households in the district.",
         )
@@ -726,7 +860,7 @@ with st.form("prediction_form"):
         median_income = st.number_input(
             "Median income (× $10,000)",
             min_value=0.0,
-            value=float(defaults["median_income"]),
+            key="input_median_income",
             step=0.1,
             format="%.4f",
             help="The dataset’s median household income measure, expressed in tens of thousands of US dollars.",
@@ -760,13 +894,25 @@ if submitted:
         columns=FEATURE_COLUMNS,
     )
     prediction = float(model.predict(input_frame)[0])
+    st.session_state.prediction_result = prediction
+    st.session_state.prediction_model_name = bundle.get("model_name", "trained")
+
+if st.session_state.prediction_result is not None:
+    saved_prediction = float(st.session_state.prediction_result)
+    saved_model_name = st.session_state.prediction_model_name or bundle.get("model_name", "trained")
     st.markdown(
-        f'<div class="prediction-card"><div class="prediction-label">Estimated market value</div><div class="prediction-value">${prediction:,.0f}</div></div>',
+        f'<div class="prediction-card"><div class="prediction-label">Estimated market value</div><div class="prediction-value">${saved_prediction:,.0f}</div></div>',
         unsafe_allow_html=True,
     )
     st.caption(
-        f"Direct output from the {bundle.get('model_name', 'trained')} regression pipeline for the property profile above."
+        f"Direct output from the {saved_model_name} regression pipeline. This result is preserved when you switch Light/Dark mode."
     )
+    if best_rmse is not None:
+        st.info(
+            f"How to read the chart above: it compares model accuracy, not your property. "
+            f"The gold {saved_model_name} bar is the production model; its typical validation error is about ${best_rmse:,.0f}. "
+            "Changing your inputs changes the estimated market value, while the RMSE comparison stays fixed because it describes model performance."
+        )
 
 # -------------------- INPUT GLOSSARY --------------------
 st.markdown('<div class="section-head"><p class="eyebrow">A closer look</p><p class="section-title">What each input means</p></div>', unsafe_allow_html=True)
