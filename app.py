@@ -38,6 +38,23 @@ background_rule = (
     else "background-image: linear-gradient(135deg, #13283d, #2d5a68);"
 )
 
+# -------------------- THEME CONTROL --------------------
+if "theme_mode" not in st.session_state:
+    st.session_state.theme_mode = "Light"
+
+theme_mode = st.radio(
+    "Appearance",
+    ("Light", "Dark"),
+    horizontal=True,
+    key="theme_mode",
+    help="Switch between light and dark appearance.",
+)
+dark_mode = theme_mode == "Dark"
+st.markdown(
+    '<span class="dark-mode-marker"></span>' if dark_mode else '<span class="light-mode-marker"></span>',
+    unsafe_allow_html=True,
+)
+
 # -------------------- DESIGN SYSTEM --------------------
 st.markdown(
     f"""
@@ -327,6 +344,98 @@ st.markdown(
             padding: 1.8rem 0 0.5rem;
         }}
 
+        /* Dark mode: all surfaces, labels, inputs, cards, and chart-adjacent text
+           use explicit high-contrast colors so content remains visible. */
+        body:has(.dark-mode-marker) {{
+            --ink: #edf4f8;
+            --muted: #b7c5cf;
+            --navy: #edf4f8;
+            --navy-2: #d4e0e7;
+            --cream: #0d151e;
+            --sand: #172532;
+            --gold: #e4b86d;
+            --gold-light: #4d3a1f;
+            --teal: #78c8bc;
+            --line: #314554;
+        }}
+
+        body:has(.dark-mode-marker) [data-testid="stAppViewContainer"],
+        body:has(.dark-mode-marker) [data-testid="stMain"] {{
+            background: var(--cream);
+            color: var(--ink);
+        }}
+
+        body:has(.dark-mode-marker) .topbar-meta,
+        body:has(.dark-mode-marker) .section-copy,
+        body:has(.dark-mode-marker) .model-intro,
+        body:has(.dark-mode-marker) .chart-note,
+        body:has(.dark-mode-marker) .input-note,
+        body:has(.dark-mode-marker) .glossary-definition,
+        body:has(.dark-mode-marker) .footer-note {{
+            color: var(--muted) !important;
+        }}
+
+        body:has(.dark-mode-marker) div[data-testid="stMetric"],
+        body:has(.dark-mode-marker) .chart-card,
+        body:has(.dark-mode-marker) .glossary-card,
+        body:has(.dark-mode-marker) div[data-testid="stForm"] {{
+            background: #16232f !important;
+            border-color: var(--line) !important;
+            color: var(--ink) !important;
+        }}
+
+        body:has(.dark-mode-marker) .form-column-label,
+        body:has(.dark-mode-marker) .glossary-term,
+        body:has(.dark-mode-marker) div[data-testid="stMetricValue"] {{
+            color: var(--ink) !important;
+        }}
+
+        body:has(.dark-mode-marker) div[data-testid="stMetricLabel"] p,
+        body:has(.dark-mode-marker) label,
+        body:has(.dark-mode-marker) [data-testid="stWidgetLabel"] p,
+        body:has(.dark-mode-marker) [data-testid="stMarkdownContainer"] p,
+        body:has(.dark-mode-marker) [data-testid="stMarkdownContainer"] strong {{
+            color: var(--muted) !important;
+        }}
+
+        body:has(.dark-mode-marker) [data-baseweb="select"] > div,
+        body:has(.dark-mode-marker) [data-testid="stNumberInputContainer"],
+        body:has(.dark-mode-marker) input,
+        body:has(.dark-mode-marker) textarea {{
+            background: #20313f !important;
+            color: #f4f8fa !important;
+            border-color: #4a6070 !important;
+        }}
+
+        body:has(.dark-mode-marker) input::placeholder,
+        body:has(.dark-mode-marker) textarea::placeholder {{
+            color: #aebdc7 !important;
+        }}
+
+        body:has(.dark-mode-marker) [data-baseweb="select"] svg,
+        body:has(.dark-mode-marker) [data-testid="stNumberInputContainer"] svg {{
+            fill: #e3edf2 !important;
+        }}
+
+        body:has(.dark-mode-marker) [data-testid="stFormSubmitButton"] button,
+        body:has(.dark-mode-marker) .stButton > button {{
+            color: #172433 !important;
+        }}
+
+        body:has(.dark-mode-marker) .glossary-item {{
+            border-bottom-color: #2d4050 !important;
+        }}
+
+        body:has(.dark-mode-marker) .disclaimer {{
+            background: #173431 !important;
+            color: #b9ddd7 !important;
+            border-left-color: var(--teal) !important;
+        }}
+
+        body:has(.dark-mode-marker) [data-testid="stAlert"] {{
+            color: #edf4f8 !important;
+        }}
+
         @media (max-width: 720px) {{
             main .block-container {{ padding: 1rem 1rem 1.5rem; }}
             .hero {{ min-height: 360px; padding: 2.3rem 1.45rem 2rem; }}
@@ -429,6 +538,11 @@ else:
     best_rmse = None
     best_r2 = None
 
+chart_axis_color = "#b7c5cf" if dark_mode else "#66717e"
+chart_other_bar = "#587080" if dark_mode else "#b8c5ce"
+chart_grid = "#304554" if dark_mode else "#eee9df"
+chart_background = "#16232f" if dark_mode else "#ffffff"
+
 # -------------------- TOP NAVIGATION --------------------
 st.markdown(
     """
@@ -491,14 +605,14 @@ if not metrics_frame.empty:
             x=alt.X(
                 "RMSE:Q",
                 title="Holdout RMSE (USD)",
-                axis=alt.Axis(format="$,.0f", titleColor="#66717e", labelColor="#66717e"),
+                axis=alt.Axis(format="$,.0f", titleColor=chart_axis_color, labelColor=chart_axis_color),
                 scale=alt.Scale(domain=[0, None]),
             ),
-            y=alt.Y("Model:N", title=None, sort="-x", axis=alt.Axis(labelColor="#172433")),
+            y=alt.Y("Model:N", title=None, sort="-x", axis=alt.Axis(labelColor=chart_axis_color)),
             color=alt.condition(
                 alt.datum.Production,
                 alt.value("#c9974e"),
-                alt.value("#b8c5ce"),
+                alt.value(chart_other_bar),
             ),
             tooltip=[
                 alt.Tooltip("Model:N", title="Model"),
@@ -507,9 +621,9 @@ if not metrics_frame.empty:
                 alt.Tooltip("Production:N", title="Used in app"),
             ],
         )
-        .properties(height=230)
+        .properties(height=230, background=chart_background)
         .configure_view(strokeOpacity=0)
-        .configure_axis(gridColor="#eee9df", domain=False, tickColor="#eee9df")
+        .configure_axis(gridColor=chart_grid, domain=False, tickColor=chart_grid)
     )
     st.markdown('<div class="chart-card">', unsafe_allow_html=True)
     st.markdown('<p class="chart-note">Gold = production model · Gray = comparison models</p>', unsafe_allow_html=True)
