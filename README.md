@@ -23,9 +23,9 @@
 
 **Housing Price Predictor** turns a small set of property and location attributes into an estimated house value through an interactive web interface. The project combines a reproducible Jupyter Notebook workflow with a Streamlit front end, allowing users to experiment with features such as median income, room counts, location, and ocean proximity.
 
-The repository contains the California housing dataset, the model-development notebook, and the Streamlit application. The notebook compares four regression approaches—Linear Regression, Decision Tree, Random Forest, and XGBoost—using standard regression metrics before the selected model is consumed by the application.[1] [2]
+The repository contains the California housing dataset, the model-development notebook, a reproducible training module, and the Streamlit application. The training workflow compares four regression approaches—Linear Regression, Decision Tree, Random Forest, and XGBoost—using standard regression metrics, then persists the complete winning preprocessing-and-regression pipeline for inference.[1] [2]
 
-> **Important runtime note:** `app.py` expects a serialized model at `model/house_price_model.pkl`. That artifact is not currently checked into this repository, so the model must be exported to that path before launching the Streamlit application.
+> **Runtime behavior:** `app.py` loads `model/house_price_model.pkl` when it exists. If the artifact is absent—as is common on a fresh Streamlit deployment—the app trains the model once from the checked-in `housing.csv`, caches it, and then predicts with that fitted pipeline. Predictions are never hard-coded.
 
 ## Highlights
 
@@ -35,7 +35,7 @@ The repository contains the California housing dataset, the model-development no
 | Ready-made scenarios | Affordable Home, Large Family Home, and Coastal Property presets make the interface easy to explore. |
 | Multiple-model experimentation | The notebook compares four regression families before selecting a best-performing model. |
 | Mixed-type preprocessing | Numerical features are imputed and scaled, while the categorical ocean-proximity feature is one-hot encoded. |
-| Cached inference | Streamlit resource caching avoids repeatedly loading the serialized model during a session. |
+| Cached inference | Streamlit resource caching avoids repeatedly loading or training the model during a session. |
 | Explainable project layout | Dataset, experimentation notebook, inference app, and dependencies are kept in clearly named files. |
 
 ## Technology stack
@@ -65,7 +65,7 @@ The repository contains the California housing dataset, the model-development no
 
 ## Architecture
 
-The project follows a simple **offline-training / online-inference** architecture. Model exploration and preprocessing live in the notebook, while `app.py` is intentionally focused on loading the chosen artifact, collecting user input, and returning a prediction.
+The project follows a reproducible **training / inference** architecture. The notebook and `train_model.py` define the preprocessing and model-selection workflow. `app.py` loads the chosen artifact, or creates it from `housing.csv` when needed, then collects user input and returns a prediction from the fitted pipeline.
 
 ```mermaid
 flowchart LR
@@ -92,9 +92,10 @@ flowchart LR
 | --- | --- |
 | `housing.csv` | Supplies the source records used during experimentation. |
 | `housing_price_prediction.ipynb` | Loads data, separates features and target, builds preprocessing pipelines, trains candidate regressors, evaluates them, and demonstrates prediction. |
+| `train_model.py` | Reproducibly trains candidate models, selects the lowest-RMSE model, and saves the complete fitted pipeline. |
 | Preprocessing pipeline | Applies median imputation and standard scaling to numerical columns and one-hot encoding to `ocean_proximity`. |
-| `model/house_price_model.pkl` | Stores the fitted model artifact expected by the application at runtime. |
-| `app.py` | Renders the Streamlit interface, accepts feature values, constructs a one-row DataFrame, and displays the predicted value. |
+| `model/house_price_model.pkl` | Optional persisted model bundle. The app creates it automatically when missing. |
+| `app.py` | Renders the Streamlit interface, validates feature values, constructs a one-row DataFrame, and displays the direct output of the fitted pipeline. |
 
 ## Prediction flow
 
@@ -122,17 +123,18 @@ sequenceDiagram
 Housing-price-predictor/
 ├── app.py                              # Streamlit inference interface
 ├── housing.csv                         # Housing dataset
-├── housing_price_prediction.ipynb      # Data preparation, training, and evaluation workflow
-├── requirements.txt                    # Core Python dependencies
+├── housing_price_prediction.ipynb      # Notebook training and evaluation workflow
+├── train_model.py                       # Reproducible training and artifact generation
+├── requirements.txt                    # Runtime dependencies including Streamlit
 ├── .gitignore
 └── README.md
 ```
 
-The runtime model directory is intentionally shown separately because the expected `model/house_price_model.pkl` artifact is not part of the current checkout:
+The model directory is generated automatically when the app first trains the model:
 
 ```text
 model/
-└── house_price_model.pkl               # Required by app.py at runtime
+└── house_price_model.pkl               # Generated cache of the fitted pipeline
 ```
 
 ## Getting started
@@ -154,26 +156,22 @@ source .venv/bin/activate       # macOS/Linux
 
 ### 3. Install dependencies
 
-The checked-in `requirements.txt` contains the core data-science and model-persistence packages. The Streamlit interface also requires Streamlit itself.
+The checked-in `requirements.txt` includes the data-science, model-persistence, and Streamlit packages:
 
 ```bash
 python -m pip install --upgrade pip
-pip install -r requirements.txt streamlit jupyter
+pip install -r requirements.txt
 ```
 
-### 4. Prepare the model artifact
+### 4. Train the model (optional)
 
-Run the cells in `housing_price_prediction.ipynb` to reproduce the data-preparation and model-comparison workflow. Export the selected fitted model with Joblib to the path consumed by `app.py`:
+The Streamlit app automatically trains and caches the model when the artifact is missing. To create it explicitly before launch, run:
 
-```python
-from pathlib import Path
-import joblib
-
-Path("model").mkdir(exist_ok=True)
-joblib.dump(best_model, "model/house_price_model.pkl")
+```bash
+python train_model.py
 ```
 
-The variable `best_model` should refer to the fitted estimator selected after comparing the candidate regressors. Because the application expects the complete fitted pipeline, export the pipeline that includes preprocessing rather than only the final regressor.
+This writes `model/house_price_model.pkl`. The saved bundle contains the preprocessing transformer, the selected regressor, feature metadata, and holdout metrics. Saving the complete pipeline is important because the application must apply the same imputation, scaling, and one-hot encoding used during training.
 
 ### 5. Launch the application
 
@@ -181,7 +179,11 @@ The variable `best_model` should refer to the fitted estimator selected after co
 streamlit run app.py
 ```
 
-Streamlit will print a local URL. Open it in a browser, choose a sample scenario or enter custom values, and select **Predict House Price**.
+Streamlit will print a local URL. Open it in a browser, choose a sample scenario or enter custom values, and select **Predict house price**. The displayed estimate is produced by `model.predict(input_frame)` on the trained pipeline.
+
+### 6. Deploy on Streamlit Community Cloud
+
+Create a new app at [share.streamlit.io](https://share.streamlit.io), select this repository and the `main` branch, and set the main file path to `app.py`. Streamlit Cloud will install `requirements.txt`; because `housing.csv` is checked in, the app can train the model automatically on its first startup even when the ignored `model/` directory is not committed.
 
 ## Input features
 
@@ -201,7 +203,7 @@ The application builds a prediction record from the following fields. Numerical 
 
 ## Model-development workflow
 
-The notebook uses an 80/20 train-test split with a fixed random state, prepares mixed numerical and categorical columns through a Scikit-learn `ColumnTransformer`, and evaluates candidate regressors with **mean squared error** and **R² score**. The selected fitted pipeline is then intended to be persisted with Joblib for reuse by the Streamlit front end.[1] [2] [3]
+The notebook and `train_model.py` use an 80/20 train-test split with a fixed random state, prepare mixed numerical and categorical columns through a Scikit-learn `ColumnTransformer`, and evaluate candidate regressors with **root mean squared error** and **R² score**. The selected fitted pipeline is persisted with Joblib and reused by the Streamlit front end. If no artifact exists, the app executes the same training workflow before inference.[1] [2] [3]
 
 | Model | Role in the comparison |
 | --- | --- |
